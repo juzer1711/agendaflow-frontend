@@ -1,94 +1,71 @@
-# AgendaFlow · Panel de administración
+# AgendaFlow · Panel web
 
-Frontend en React + Vite + Tailwind para gestionar tu sistema de citas
-(AgendaFlow) sin depender de Postman ni copiar tokens JWT a mano.
+Interfaz de administración para gestionar citas de una barbería. Forma parte del proyecto personal de aprendizaje [AgendaFlow](https://github.com/juzer1711/agendaflow) y consume su [backend](https://github.com/juzer1711/agendaflow-backend), también utilizado por la [skill de Alexa](https://github.com/juzer1711/agenda-flow-alexa).
 
-## Puesta en marcha
+> Proyecto educativo sin terminar. Puede contener errores y flujos incompletos. Requiere la API y una base de datos Oracle preparada para utilizar sus funciones.
+
+## Tecnologías
+
+React 18, JavaScript (JSX), Vite 6, Tailwind CSS 3, PostCSS, Autoprefixer, React Router 6, Axios y Lucide React. La autenticación y las notificaciones utilizan Context de React.
+
+## Funcionalidades
+
+| Vista | Operaciones |
+| --- | --- |
+| Acceso | Iniciar/cerrar sesión, proteger rutas y avisar de expiración tras un `401` |
+| Citas | Consultar listados, citas del día y próximas; crear y cancelar |
+| Servicios | Crear, editar y desactivar servicios con precio y duración |
+| Clientes | Consultar y registrar datos personales, contacto y notas |
+| Horarios | Consultar, crear y eliminar horarios semanales; consultar y crear excepciones |
+
+Las excepciones incluyen días libres, vacaciones, bloqueos y horarios especiales. El formulario de citas calcula la hora final con la duración del servicio y envía `source: "ADMIN"`.
+
+## Ejecutar localmente
+
+Se recomienda Node.js 22 LTS y npm. Primero configura e inicia el backend; los scripts Oracle necesarios no están incluidos en estos repositorios.
 
 ```bash
 npm install
-cp .env.example .env   # ajusta VITE_API_BASE_URL si tu backend no corre en :3000
+```
+
+Opcionalmente, crea `.env` en la raíz de este módulo:
+
+```dotenv
+VITE_API_BASE_URL=http://localhost:3000
+```
+
+La URL apunta a la raíz del backend, sin `/api`. Si se omite, se usa `http://localhost:3000`. Este módulo no incluye `.env.example`.
+
+Configura `CORS_ORIGIN=http://localhost:5173` en el backend y ejecuta:
+
+```bash
 npm run dev
 ```
 
-La app queda en `http://localhost:5173`. Tu backend ya trae `CORS_ORIGIN=http://localhost:5173`
-en su `.env`, así que no necesitas tocar nada ahí.
+Abre `http://localhost:5173` e inicia sesión con un usuario existente. No hay pantalla de registro; se puede crear un barbero mediante `POST /api/auth/register` del backend si Oracle tiene el package correspondiente.
 
-## Estructura
+| Comando | Función |
+| --- | --- |
+| `npm run dev` | Desarrollo con Vite |
+| `npm run build` | Generar archivos estáticos en `dist` |
+| `npm run preview` | Previsualizar el build localmente |
 
-```
-src/
-  api/             Wrappers de axios por recurso (auth, appointments, services, schedules, customers)
-  api/client.js     Cliente axios: interceptor de JWT, manejo global de 401, unwrap({success,data}), getErrorMessage
-  utils/datetime.js Helpers para construir/formatear los datetimes ISO que exige el backend (Zod)
-  context/          AuthContext (sesión/token/usuario) y ToastContext (notificaciones)
-  components/       Layout, Sidebar, modales, formularios reutilizables
-  pages/            Una página por módulo (Login, Appointments, Services, Schedules, Customers)
-```
+Al alojar el build, configura la URL de la API antes de compilar y la reescritura de rutas hacia `index.html` para la navegación con `BrowserRouter`.
 
-## Contrato real del backend (ajustado desde el código fuente)
+## Código
 
-Todas las respuestas del backend van envueltas:
-- Éxito: `{ success: true, data: ... }`
-- Error: `{ success: false, error: { code, message, details? } }` (los `details` de
-  validación de Zod se anexan al mensaje del toast cuando aplica).
+- [src/api](./src/api/): cliente Axios y llamadas por recurso; adjunta el JWT y maneja respuestas `401`.
+- [src/context](./src/context/): sesión y notificaciones.
+- [src/pages](./src/pages/): acceso, citas, servicios, clientes y horarios.
+- [src/components](./src/components/): navegación, layout, modales y formularios.
+- [src/utils/datetime.js](./src/utils/datetime.js): construcción y formato de fechas para la API.
 
-### Auth
-- `POST /api/auth/login` → `{ data: { token, user: { userId, barberId, role, email } } }`
-- `GET /api/auth/me` y `POST /api/auth/register` existen en el backend pero no se usan
-  todavía desde este panel (login es el único flujo implementado en la UI).
+## Pendientes y límites
 
-### Citas (`/api/appointments`)
-- `GET /`, `GET /today`, `GET /next` — **no existe `/upcoming`**. La pestaña "Próximas"
-  se arma pidiendo `GET /?page=1&limit=100` y filtrando en el cliente por
-  `status ∈ {PENDING, CONFIRMED}` y `startAt` futuro.
-- `POST /` — body `{ customerId, serviceId, startAt, endAt, source, notes? }`, donde
-  `startAt`/`endAt` son datetimes ISO completos (no `date`+`time` sueltos). El formulario
-  calcula `endAt` automáticamente sumando la duración del servicio a la hora de inicio, y
-  siempre manda `source: "ADMIN"`.
-- **No hay `PUT` ni `DELETE`** para citas — solo `PATCH /:id/cancel` (204, sin body). Por
-  eso la UI solo permite crear y cancelar, no editar.
-- Las filas que regresa el backend ya traen `customer` y `service` como texto (nombre
-  completo / nombre del servicio), no como IDs — así que no hace falta cruzar con las
-  listas de clientes/servicios para mostrarlas.
-
-### Servicios (`/api/services`)
-- CRUD completo, pero **`DELETE` en realidad desactiva** el servicio (`status = 'INACTIVE'`)
-  en vez de borrarlo, y el listado no filtra por estado. La UI filtra los `INACTIVE`
-  para que no sigan apareciendo tras "eliminarlos".
-- Campos: `serviceId` (no `id`), `name`, `description` (opcional), `price`,
-  `durationMinutes`.
-
-### Clientes (`/api/customers`)
-- **Solo `GET` y `POST`** — no hay `PUT` ni `DELETE` todavía, así que la UI no ofrece
-  editar/eliminar (se muestra un aviso explicándolo).
-- Campos: `customerId` (no `id`), `firstName`, `lastName`, `phone`, `whatsappPhone`
-  (aparte del teléfono), `email`, `notes`.
-
-### Horarios y excepciones (`/api/schedules`)
-- `GET /`, `POST /`, `DELETE /:id` para horarios semanales.
-- `GET /exceptions`, `POST /exceptions` para excepciones — **sin `DELETE`** todavía.
-- `dayOfWeek` es un número **1–7**. Asumí convención ISO-8601 (1 = Lunes … 7 = Domingo);
-  si tu procedimiento `PKG_SCHEDULE` usa otra numeración (p. ej. 0 = Domingo), dime y
-  ajusto el mapeo en `src/components/ScheduleForm.jsx`.
-- `startTime`/`endTime` deben ser datetimes ISO completos aunque solo representen una
-  hora del día. Los construimos anclando a una fecha fija (`2000-01-01`) más la hora
-  elegida — ver `src/utils/datetime.js`.
-- Excepciones: `type` es `DAY_OFF | VACATION | BLOCK | SPECIAL_HOURS`. Para `BLOCK` y
-  `SPECIAL_HOURS` la UI muestra un rango horario opcional; el resto asume día completo.
-
-### Barbero / perfil (`/api/barber/profile`)
-- `GET`/`PUT` existen en el backend pero **aún no tienen pantalla en este panel**. Si
-  quieres, agrego una vista de "Mi perfil" para editar nombre, teléfono, bio, etc.
-
-## Pendientes conocidos (limitaciones del backend actual, no del frontend)
-
-1. No se pueden editar ni eliminar clientes — faltan `PUT`/`DELETE /api/customers/:id`.
-2. No se pueden editar citas ni eliminarlas de verdad — solo cancelar.
-3. No se pueden eliminar excepciones de horario.
-4. "Eliminar" un servicio en realidad lo desactiva; si necesitas un borrado real habría
-   que agregarlo en `PKG_SERVICE`.
-
-Si agregas alguno de estos endpoints, avísame y actualizo la UI correspondiente (los
-componentes ya están hechos para que sea un cambio pequeño: solo hay que exponer la
-llamada en `src/api/*.js` y volver a mostrar el botón de editar/eliminar).
+- No hay pantallas de registro ni edición del perfil, aunque la API tiene esas operaciones.
+- No se editan ni eliminan clientes; las citas solo se crean, consultan y cancelan. Las excepciones no se editan ni eliminan.
+- La eliminación de servicios los desactiva en el backend; el panel oculta los `INACTIVE`.
+- Varios listados solo solicitan la primera página de hasta 100 registros. «Próximas» filtra citas futuras `PENDING` o `CONFIRMED` de esa página en el navegador y puede omitir registros posteriores.
+- Token y usuario se guardan en `localStorage`, sin renovación automática del JWT.
+- Los horarios usan fechas ISO completas ancladas a una fecha fija. El panel interpreta lunes = 1 y domingo = 7; esa convención debe coincidir con Oracle.
+- No hay un script de pruebas automatizadas en este módulo. Compilar no valida todos los flujos ni la integración con Oracle.
